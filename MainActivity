@@ -1,0 +1,196 @@
+package com.baronsquee.stuartthomas.premiumdisplay;
+
+import android.content.Intent;
+import android.graphics.Color;
+import android.support.v7.app.ActionBarActivity;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.Menu;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+
+import org.achartengine.ChartFactory;
+import org.achartengine.chart.PointStyle;
+import org.achartengine.model.XYMultipleSeriesDataset;
+import org.achartengine.model.XYSeries;
+import org.achartengine.renderer.XYMultipleSeriesRenderer;
+import org.achartengine.renderer.XYSeriesRenderer;
+
+import java.sql.*;
+import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.DriverManager;
+import javax.sql.*;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.text.Format;
+import java.text.SimpleDateFormat;
+
+
+
+public class MyActivity extends ActionBarActivity {
+
+//    @Override
+
+    public String AGTCode = "";
+    public String str;
+
+    {
+        str = "Ready!";
+    }
+
+
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_my);
+
+        Button chartbutton = (Button)findViewById(R.id.chartbutton);
+
+        chartbutton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v)  {
+            EditText mEdit = (EditText) findViewById(R.id.editText1);
+            Log.v("EditText", mEdit.getText().toString() );
+                AGTCode = mEdit.getText().toString();
+
+                str = "Opening Chart with AGT" + AGTCode + "...";
+                TextView StatusUpd = (TextView)findViewById(R.id.textView3);
+                StatusUpd.setText(str, TextView.BufferType.EDITABLE);
+try {
+    OpenChart();
+} catch (SQLException o) {
+
+}
+            }
+
+        });
+        //OpenChart();
+    }
+
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.my, menu);
+        return true;
+    }
+
+    protected void OpenChart() throws SQLException {
+
+        String Username = "PremDisp";
+        String Password = "NetworkedPassword";
+        str = "Beginning Chart open process for username " + Username;
+        TextView StatusUpd = (TextView)findViewById(R.id.textView3);
+        StatusUpd.setText(str, TextView.BufferType.EDITABLE);
+
+        try
+        {
+           Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        }
+
+        catch (Exception e)
+
+        {
+            e.printStackTrace();
+        }
+
+        str = "Driver located...for username " + Username;
+        StatusUpd.setText(str, TextView.BufferType.EDITABLE);
+        String URL = "jdbc:sqlserver://12.183.185.135:1433;databaseName=CIS;integratedSecurity=true";
+        //String URL = "jdbc:sqlserver://172.21.3.85:1433;databaseName=CIS;integratedSecurity=true";
+        // String URL = "jdbc:jtds:sqlserver://172.21.3.85:1433/CIS;instance=;useNTLMv2=true;domain=NIA";
+        Connection DBActivate = DriverManager.getConnection (URL, Username, Password);
+        Statement PremiumGrab = DBActivate.createStatement();
+        str = "Connected to the Database";
+        StatusUpd.setText(str, TextView.BufferType.EDITABLE);
+        String SQLQuery =
+
+
+                "Select sum (Policy.WrittenPremium)Premium, Policy.Effective\n" +
+                        "\n" +
+                        "from dbo.policy \n" +
+                        "\n" +
+                        "inner join dbo.Quote \n" +
+                        "\n" +
+                        "on \n" +
+                        "\n" +
+                        "Policy.QuoteID = Quote.QuoteID where ProducerID = 'AGT" + AGTCode + "'\n" +
+                        "\n" +
+                        "Group by Quote.ProducerID, Policy.Effective";
+
+        ResultSet SQLRS = PremiumGrab.executeQuery(SQLQuery);
+        ResultSetMetaData rsmd = SQLRS.getMetaData();
+        int ColNo = rsmd.getColumnCount();
+        double[] Premiums = new double[ColNo+1];
+        String[] AgentDates = new String[ColNo+1];
+        int MoneyIn = 1;
+        String RawYear;
+        String RawMonth;
+        String RawDay;
+        String RawDate;
+        Double ADatesConv[] = new Double[ColNo+1];
+        while (SQLRS.next())
+        {
+            for (int i=1; i <= ColNo; i++)
+            {
+                if (MoneyIn == 1)
+                {
+                    Premiums[i] = SQLRS.getDouble(i);
+                    System.out.println ("P.= " + Premiums[i] + ", ");
+                    MoneyIn = 0;
+                } else
+                {
+                    AgentDates[i] = SQLRS.getString(i);
+                    RawYear = AgentDates[i].substring(0,4);
+                    RawMonth = AgentDates[i].substring(5,7);
+                    RawDay = AgentDates[i].substring(8,10);
+                    RawDate = RawYear + RawMonth + RawDay;
+                    ADatesConv[i] = Double.parseDouble(RawDate);
+                    System.out.println ("D. = " + RawDate + ", ");
+                    MoneyIn = 1;
+                }
+            }
+        }
+
+        XYSeries series = new XYSeries ("");
+
+        for (int j = 0; j<AgentDates.length; j++) {
+            series.add (ADatesConv[j], Premiums[j]);
+
+        }
+        XYMultipleSeriesDataset dataset = new XYMultipleSeriesDataset();
+        dataset.addSeries(series);
+
+
+        XYSeriesRenderer renderer1 =  new XYSeriesRenderer();
+        renderer1.setColor(Color.BLUE);
+        renderer1.setPointStyle(PointStyle.CIRCLE);
+        renderer1.setFillPoints(true);
+        renderer1.setLineWidth(2);
+        renderer1.setDisplayChartValues(true);
+
+
+        XYMultipleSeriesRenderer multirenderer = new XYMultipleSeriesRenderer();
+        multirenderer.setXLabels(0);
+        multirenderer.setChartTitle("Written Premium for AGT" + AGTCode);
+        multirenderer.setXTitle("Date");
+        multirenderer.setYTitle("Premium");
+        multirenderer.setZoomButtonsVisible(true);
+        multirenderer.addSeriesRenderer(renderer1);
+        Intent intent = ChartFactory.getLineChartIntent(getBaseContext(), dataset, multirenderer);
+        startActivity (intent);
+
+    }
+
+    protected void PingClass() {
+
+        String URL = "//172.21.3.85:1433";
+
+            }
+
+}
+
+
+
